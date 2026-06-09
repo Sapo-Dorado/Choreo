@@ -24,9 +24,8 @@
             fi
             echo ""
             echo "Choreo dev shell ready."
-            echo "  npm install       — install dependencies"
-            echo "  npm start         — start Expo (local only)"
-            echo "  ./scripts/dev.sh  — start Expo + send QR code via sapo notify"
+            echo "  npm install   — install dependencies"
+            echo "  npm start     — start Expo dev server"
             echo ""
           '';
         };

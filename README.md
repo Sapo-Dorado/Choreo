@@ -2,15 +2,9 @@
 
 An iOS app built with [Expo](https://expo.dev) / React Native.
 
-## Development (Linux / NixOS)
+## Development
 
-This project uses a [Nix flake](https://nixos.wiki/wiki/Flakes) to provide a reproducible dev environment with Node.js and all required tooling. You do not need to install Node globally.
-
-### Prerequisites
-
-- [Nix](https://nixos.org) with flakes enabled
-- [Expo Go](https://apps.apple.com/app/expo-go/id982107779) installed on your iPhone
-- Your iPhone connected to the same [Tailscale](https://tailscale.com) network as this machine
+This project uses a [Nix flake](https://nixos.wiki/wiki/Flakes) for a reproducible dev environment. You do not need to install Node globally.
 
 ### Enter the dev shell
 
@@ -18,7 +12,7 @@ This project uses a [Nix flake](https://nixos.wiki/wiki/Flakes) to provide a rep
 nix develop
 ```
 
-This drops you into a shell with `node`, `npx`, `expo`, and `qrencode` available.
+Provides: `node` (v22), `npx`, `expo`, `qrencode`.
 
 ### Install dependencies
 
@@ -28,30 +22,34 @@ npm install
 
 ### Start the dev server
 
-#### Option A — with QR code sent to your phone (recommended)
-
-```bash
-./scripts/dev.sh
-```
-
-This will:
-1. Start the Expo Metro bundler bound to the Tailscale hostname
-2. After ~5 seconds, generate a QR code and send it to you via sapo notify
-3. Open the notification on your iPhone, tap the QR code, and Expo Go will launch the app with live reload
-
-#### Option B — terminal only
-
 ```bash
 npm start
 ```
 
-Prints the QR code in the terminal. Scan it with your iPhone camera (it opens Expo Go automatically) or with the Expo Go app's built-in scanner.
+Starts the Expo Metro bundler and prints a QR code in the terminal.
 
-> **Note:** For Tailscale access, use `npm start -- --host nixos.tailee43b7.ts.net` so the QR encodes the correct address.
+**To test on a physical iPhone:**
 
-### Hot reload
+1. Install [Expo Go](https://apps.apple.com/app/expo-go/id982107779) on your iPhone
+2. Make sure your iPhone is on the same network as your dev machine
+3. Scan the QR code with your iPhone camera (or the scanner inside Expo Go)
 
-Once connected, any file changes trigger an instant reload in Expo Go over the Tailscale connection. No rebuild needed.
+The app loads with live reload — any file change updates the app without rebuilding.
+
+**To bind to a specific host** (e.g. a VPN or alternate network interface):
+
+```bash
+npx expo start --host <hostname-or-ip>
+```
+
+The QR code will encode `exp://<hostname>:<port>` — point your phone at that address.
+
+**To generate a QR image file:**
+
+```bash
+# With the server already running:
+qrencode -o qr.png -s 8 "exp://<your-host>:8081"
+```
 
 ---
 
@@ -62,31 +60,23 @@ iOS builds require macOS (or a cloud Mac service). The recommended approach is [
 ```bash
 npm install -g eas-cli
 eas login
+eas build:configure   # first time only — generates eas.json
 eas build --platform ios
 ```
 
-EAS Build runs the Xcode build on Expo's cloud macOS infrastructure — no Mac hardware required. EAS Submit can then push the resulting `.ipa` directly to App Store Connect:
+EAS Build runs on Expo's cloud macOS infrastructure — no Mac hardware required. To submit directly to App Store Connect:
 
 ```bash
 eas submit --platform ios
 ```
-
-### First-time EAS setup
-
-```bash
-eas build:configure
-```
-
-This generates `eas.json`. Commit it to the repo.
 
 ---
 
 ## Project structure
 
 ```
-App.tsx          — root component
-app.json         — Expo config (name, icons, permissions)
-flake.nix        — Nix dev environment
-scripts/dev.sh   — helper: start server + send QR via sapo notify
-assets/          — icons and splash screen images
+App.tsx        — root component
+app.json       — Expo config (name, icons, permissions, bundle ID)
+flake.nix      — Nix dev environment
+assets/        — icons and splash screen images
 ```
