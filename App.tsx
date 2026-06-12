@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { useShareIntent } from 'expo-share-intent';
 import HomeScreen from './src/screens/HomeScreen';
 import PlayerScreen from './src/screens/PlayerScreen';
 
@@ -9,6 +10,16 @@ type Screen = 'home' | 'player';
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [videoUrl, setVideoUrl] = useState('');
+
+  const { shareIntent, resetShareIntent } = useShareIntent();
+
+  useEffect(() => {
+    if (shareIntent?.webUrl) {
+      setVideoUrl(shareIntent.webUrl);
+      setScreen('player');
+      resetShareIntent();
+    }
+  }, [shareIntent, resetShareIntent]);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#111' }}>
