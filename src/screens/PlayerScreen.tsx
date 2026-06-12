@@ -1,13 +1,15 @@
 import React, { useRef, useState } from 'react';
 import {
-  Dimensions,
   Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import YoutubePlayer, { YoutubeIframeRef } from 'react-native-youtube-iframe';
+import MirrorToggle from '../components/MirrorToggle';
+import SpeedControl from '../components/SpeedControl';
 import { parseYouTubeId } from '../utils/youtube';
 
 interface PlayerScreenProps {
@@ -18,12 +20,17 @@ interface PlayerScreenProps {
 export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
   const playerRef = useRef<YoutubeIframeRef | null>(null);
 
-  // Phase 2 state (no UI yet)
-  const [playbackRate, setPlaybackRate] = useState(1);   // eslint-disable-line @typescript-eslint/no-unused-vars
-  const [mirrored, setMirrored] = useState(false);       // eslint-disable-line @typescript-eslint/no-unused-vars
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [mirrored, setMirrored] = useState(false);
+  const [playing, setPlaying] = useState(true);
 
   const videoId = parseYouTubeId(videoUrl);
-  const playerHeight = Math.round(Dimensions.get('window').width * (9 / 16));
+  const { width: playerWidth } = useWindowDimensions();
+  const playerHeight = Math.round(playerWidth * (9 / 16));
+
+  function handleRateChange(rate: number) {
+    setPlaybackRate(rate);
+  }
 
   if (!videoId) {
     return (
@@ -53,13 +60,37 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
           </Pressable>
         </View>
 
-        <YoutubePlayer
-          ref={playerRef}
-          height={playerHeight}
-          videoId={videoId}
-          play={true}
-          initialPlayerParams={{ rel: false, controls: true }}
-        />
+        <View
+          style={[
+            styles.playerWrapper,
+            { width: playerWidth, height: playerHeight },
+            { transform: [{ scaleX: mirrored ? -1 : 1 }] },
+          ]}
+        >
+          <YoutubePlayer
+            ref={playerRef}
+            height={playerHeight}
+            videoId={videoId}
+            play={playing}
+            playbackRate={playbackRate}
+            onChangeState={(state) => {
+              if (state === 'paused') setPlaying(false);
+              if (state === 'playing') setPlaying(true);
+            }}
+            initialPlayerParams={{ rel: false, controls: true }}
+          />
+        </View>
+
+        <View style={styles.controls}>
+          <SpeedControl
+            currentRate={playbackRate}
+            onRateChange={handleRateChange}
+          />
+          <MirrorToggle
+            mirrored={mirrored}
+            onToggle={() => setMirrored((m) => !m)}
+          />
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -88,6 +119,14 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '500',
+  },
+  playerWrapper: {
+    // No overflow: 'hidden' — it clips mirrored content on iOS due to transform interaction
+  },
+  controls: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    gap: 16,
   },
   errorContainer: {
     flex: 1,
