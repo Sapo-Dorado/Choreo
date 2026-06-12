@@ -7,7 +7,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import YoutubePlayer, { YoutubeIframeRef } from 'react-native-youtube-iframe';
+import WebView from 'react-native-webview';
 import MirrorToggle from '../components/MirrorToggle';
 import SpeedControl from '../components/SpeedControl';
 import { parseYouTubeId } from '../utils/youtube';
@@ -17,12 +17,39 @@ interface PlayerScreenProps {
   onBack: () => void;
 }
 
-export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
-  const playerRef = useRef<YoutubeIframeRef | null>(null);
+// Injected once on WebView load.
+// Sets up window._choreo with setRate/setMirror helpers that apply directly
+// to the HTML5 <video> element — bypassing the YouTube IFrame API entirely.
+// A 500ms poll keeps settings applied since YouTube's player can reset them.
+const SETUP_SCRIPT = `
+(function() {
+  var state = { rate: 1, mirror: false };
 
+  function apply() {
+    var v = document.querySelector('video');
+    if (!v) return;
+    if (v.playbackRate !== state.rate) v.playbackRate = state.rate;
+    var t = state.mirror ? 'scaleX(-1)' : 'none';
+    if (v.style.transform !== t) {
+      v.style.transform = t;
+      v.style.webkitTransform = t;
+    }
+  }
+
+  setInterval(apply, 500);
+
+  window._choreo = {
+    setRate: function(r) { state.rate = r; apply(); },
+    setMirror: function(m) { state.mirror = m; apply(); },
+  };
+})();
+true;
+`;
+
+export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
+  const webViewRef = useRef<WebView | null>(null);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [mirrored, setMirrored] = useState(false);
-  const [playing, setPlaying] = useState(true);
 
   const videoId = parseYouTubeId(videoUrl);
   const { width: playerWidth } = useWindowDimensions();
@@ -30,6 +57,13 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
 
   function handleRateChange(rate: number) {
     setPlaybackRate(rate);
+    webViewRef.current?.injectJavaScript(`window._choreo.setRate(${rate}); true;`);
+  }
+
+  function handleMirrorToggle() {
+    const newMirrored = !mirrored;
+    setMirrored(newMirrored);
+    webViewRef.current?.injectJavaScript(`window._choreo.setMirror(${String(newMirrored)}); true;`);
   }
 
   if (!videoId) {
@@ -51,6 +85,10 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
     );
   }
 
+  const embedUrl =
+    `https://www.youtube.com/embed/${videoId}` +
+    `?autoplay=1&controls=1&rel=0&playsinline=1&modestbranding=1`;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -60,26 +98,16 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
           </Pressable>
         </View>
 
-        <View
-          style={[
-            styles.playerWrapper,
-            { width: playerWidth, height: playerHeight },
-            { transform: [{ scaleX: mirrored ? -1 : 1 }] },
-          ]}
-        >
-          <YoutubePlayer
-            ref={playerRef}
-            height={playerHeight}
-            videoId={videoId}
-            play={playing}
-            playbackRate={playbackRate}
-            onChangeState={(state) => {
-              if (state === 'paused') setPlaying(false);
-              if (state === 'playing') setPlaying(true);
-            }}
-            initialPlayerParams={{ rel: false, controls: true }}
-          />
-        </View>
+        <WebView
+          ref={webViewRef}
+          source={{ uri: embedUrl }}
+          style={{ width: playerWidth, height: playerHeight }}
+          injectedJavaScript={SETUP_SCRIPT}
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          javaScriptEnabled
+          allowsFullscreenVideo
+        />
 
         <View style={styles.controls}>
           <SpeedControl
@@ -88,7 +116,7 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
           />
           <MirrorToggle
             mirrored={mirrored}
-            onToggle={() => setMirrored((m) => !m)}
+            onToggle={handleMirrorToggle}
           />
         </View>
       </View>
@@ -119,9 +147,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '500',
-  },
-  playerWrapper: {
-    // No overflow: 'hidden' — it clips mirrored content on iOS due to transform interaction
   },
   controls: {
     paddingHorizontal: 20,
