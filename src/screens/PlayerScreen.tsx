@@ -17,76 +17,41 @@ interface PlayerScreenProps {
   onBack: () => void;
 }
 
-// YouTube IFrame API embedded directly. sharedCookiesEnabled is the key prop —
-// Error 153 "Video Player Configuration Error" is caused by WKWebView blocking
-// the cookies YouTube's player needs for DRM/config validation. Sharing Safari's
-// cookie store (which already has YouTube session cookies) fixes it.
-function buildPlayerHtml(videoId: string): string {
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <style>
-    html, body { margin:0; padding:0; width:100%; height:100%; background:#000; overflow:hidden; }
-    #player { width:100%; height:100%; }
-    #player iframe { width:100% !important; height:100% !important; border:none; }
-  </style>
-</head>
-<body>
-  <div id="player"></div>
-  <script>
-    var ytPlayer;
-    var pendingRate = 1;
-    var pendingMirror = false;
+// Error 153 cause (YouTube July 2025 API update): WKWebView loading inline HTML
+// has a null/empty origin, so YouTube's embed validation rejects it.
+// Fix: load the embed URL directly from youtube-nocookie.com (Privacy Enhanced
+// Mode — less strict validation) with the referrer policy meta tag.
+// Since we load the embed page directly (not in a sub-iframe), injectedJavaScript
+// runs in the same context as YouTube's page and can access the <video> element.
+const SETUP_SCRIPT = `
+(function() {
+  var state = { rate: 1, mirror: false };
 
-    function applyRate(rate) {
-      pendingRate = rate;
-      if (ytPlayer && ytPlayer.setPlaybackRate) ytPlayer.setPlaybackRate(rate);
+  function apply() {
+    var v = document.querySelector('video');
+    if (!v) return;
+    if (v.playbackRate !== state.rate) v.playbackRate = state.rate;
+    var t = state.mirror ? 'scaleX(-1)' : 'none';
+    if (v.style.transform !== t) {
+      v.style.transform = t;
+      v.style.webkitTransform = t;
     }
-    function applyMirror(mirrored) {
-      pendingMirror = mirrored;
-      var iframe = document.querySelector('#player iframe');
-      if (iframe) iframe.style.transform = mirrored ? 'scaleX(-1)' : 'none';
-    }
+  }
 
-    window._choreo = { setRate: applyRate, setMirror: applyMirror };
+  setInterval(apply, 500);
 
-    var tag = document.createElement('script');
-    tag.src = 'https://www.youtube.com/iframe_api';
-    document.head.appendChild(tag);
-
-    window.onYouTubeIframeAPIReady = function() {
-      ytPlayer = new YT.Player('player', {
-        videoId: '${videoId}',
-        playerVars: {
-          autoplay: 1, controls: 1, rel: 0,
-          playsinline: 1, modestbranding: 1, fs: 1
-        },
-        events: {
-          onReady: function(e) {
-            e.target.playVideo();
-            applyRate(pendingRate);
-            applyMirror(pendingMirror);
-          },
-          onError: function(e) {
-            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
-              JSON.stringify({ type: 'ytError', code: e.data })
-            );
-          }
-        }
-      });
-    };
-  </script>
-</body>
-</html>`;
-}
+  window._choreo = {
+    setRate: function(r) { state.rate = r; apply(); },
+    setMirror: function(m) { state.mirror = m; apply(); },
+  };
+})();
+true;
+`;
 
 export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
   const webViewRef = useRef<WebView | null>(null);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [mirrored, setMirrored] = useState(false);
-  const [ytError, setYtError] = useState<number | null>(null);
-
   const videoId = parseYouTubeId(videoUrl);
   const { width: playerWidth } = useWindowDimensions();
   const playerHeight = Math.round(playerWidth * (9 / 16));
@@ -132,28 +97,19 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
 
         <WebView
           ref={webViewRef}
-          source={{ html: buildPlayerHtml(videoId) }}
+          source={{
+            uri: `https://www.youtube-nocookie.com/embed/${videoId}` +
+              `?autoplay=1&controls=1&rel=0&playsinline=1&modestbranding=1`,
+            headers: { 'Referrer-Policy': 'strict-origin-when-cross-origin' },
+          }}
           style={{ width: playerWidth, height: playerHeight }}
+          injectedJavaScript={SETUP_SCRIPT}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
           javaScriptEnabled
           allowsFullscreenVideo
           sharedCookiesEnabled
-          onMessage={(e) => {
-            try {
-              const msg = JSON.parse(e.nativeEvent.data);
-              if (msg.type === 'ytError') setYtError(msg.code as number);
-            } catch {}
-          }}
         />
-
-        {ytError !== null && (
-          <Text style={styles.errorBanner}>
-            {ytError === 101 || ytError === 150
-              ? 'This video cannot be embedded (owner restriction).'
-              : `YouTube player error ${ytError}`}
-          </Text>
-        )}
 
         <View style={styles.controls}>
           <SpeedControl
@@ -182,13 +138,6 @@ const styles = StyleSheet.create({
   backButton: { paddingVertical: 6, paddingRight: 16 },
   backText: { color: '#fff', fontSize: 17, fontWeight: '500' },
   controls: { paddingHorizontal: 20, paddingTop: 16, gap: 16 },
-  errorBanner: {
-    color: '#ff5555',
-    fontSize: 13,
-    textAlign: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-  },
   errorContainer: {
     flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24,
   },
