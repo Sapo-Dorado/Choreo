@@ -89,6 +89,12 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
     `https://www.youtube.com/embed/${videoId}` +
     `?autoplay=1&controls=1&rel=0&playsinline=1&modestbranding=1`;
 
+  // YouTube blocks embeds when it detects a non-browser user agent (WKWebView default).
+  // Spoofing Mobile Safari's UA makes YouTube treat the WebView as a real browser.
+  const userAgent =
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) ' +
+    'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -103,6 +109,7 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
           source={{ uri: embedUrl }}
           style={{ width: playerWidth, height: playerHeight }}
           injectedJavaScript={SETUP_SCRIPT}
+          userAgent={userAgent}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
           javaScriptEnabled
