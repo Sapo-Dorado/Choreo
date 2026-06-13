@@ -17,34 +17,87 @@ interface PlayerScreenProps {
   onBack: () => void;
 }
 
-// Injected once on WebView load.
-// Sets up window._choreo with setRate/setMirror helpers that apply directly
-// to the HTML5 <video> element — bypassing the YouTube IFrame API entirely.
-// A 500ms poll keeps settings applied since YouTube's player can reset them.
-const SETUP_SCRIPT = `
-(function() {
-  var state = { rate: 1, mirror: false };
-
-  function apply() {
-    var v = document.querySelector('video');
-    if (!v) return;
-    if (v.playbackRate !== state.rate) v.playbackRate = state.rate;
-    var t = state.mirror ? 'scaleX(-1)' : 'none';
-    if (v.style.transform !== t) {
-      v.style.transform = t;
-      v.style.webkitTransform = t;
+// Builds a self-contained HTML page that loads the YouTube IFrame API.
+// Using source={{ html, baseUrl: 'https://www.youtube.com' }} makes YouTube
+// think the embed is hosted on youtube.com, bypassing the "Video Player
+// Configuration Error" that WKWebView gets with direct embed URLs.
+//
+// Controls are handled via window._choreo:
+//   - setRate(n)    → ytPlayer.setPlaybackRate(n)
+//   - setMirror(b)  → CSS transform on the iframe element
+function buildPlayerHtml(videoId: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background: #000;
+      overflow: hidden;
     }
-  }
+    #player { width: 100%; height: 100%; }
+    #player iframe {
+      width: 100% !important;
+      height: 100% !important;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+  <script>
+    var ytPlayer;
+    var pendingRate = 1;
+    var pendingMirror = false;
 
-  setInterval(apply, 500);
+    function applyRate(rate) {
+      pendingRate = rate;
+      if (ytPlayer && ytPlayer.setPlaybackRate) {
+        ytPlayer.setPlaybackRate(rate);
+      }
+    }
 
-  window._choreo = {
-    setRate: function(r) { state.rate = r; apply(); },
-    setMirror: function(m) { state.mirror = m; apply(); },
-  };
-})();
-true;
-`;
+    function applyMirror(mirrored) {
+      pendingMirror = mirrored;
+      var iframe = document.querySelector('#player iframe');
+      if (iframe) {
+        iframe.style.transform = mirrored ? 'scaleX(-1)' : 'none';
+      }
+    }
+
+    window._choreo = { setRate: applyRate, setMirror: applyMirror };
+
+    // Load the YouTube IFrame API
+    var tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+
+    window.onYouTubeIframeAPIReady = function() {
+      ytPlayer = new YT.Player('player', {
+        videoId: '${videoId}',
+        playerVars: {
+          autoplay: 1,
+          controls: 1,
+          rel: 0,
+          playsinline: 1,
+          modestbranding: 1,
+          fs: 1
+        },
+        events: {
+          onReady: function(e) {
+            e.target.playVideo();
+            applyRate(pendingRate);
+            applyMirror(pendingMirror);
+          }
+        }
+      });
+    };
+  </script>
+</body>
+</html>`;
+}
 
 export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
   const webViewRef = useRef<WebView | null>(null);
@@ -85,16 +138,6 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
     );
   }
 
-  const embedUrl =
-    `https://www.youtube.com/embed/${videoId}` +
-    `?autoplay=1&controls=1&rel=0&playsinline=1&modestbranding=1`;
-
-  // YouTube blocks embeds when it detects a non-browser user agent (WKWebView default).
-  // Spoofing Mobile Safari's UA makes YouTube treat the WebView as a real browser.
-  const userAgent =
-    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) ' +
-    'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -106,10 +149,11 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
 
         <WebView
           ref={webViewRef}
-          source={{ uri: embedUrl }}
+          source={{
+            html: buildPlayerHtml(videoId),
+            baseUrl: 'https://www.youtube.com',
+          }}
           style={{ width: playerWidth, height: playerHeight }}
-          injectedJavaScript={SETUP_SCRIPT}
-          userAgent={userAgent}
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
           javaScriptEnabled
