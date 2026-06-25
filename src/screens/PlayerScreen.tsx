@@ -10,6 +10,7 @@ import {
 import WebView from 'react-native-webview';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import MirrorToggle from '../components/MirrorToggle';
+import SeekBar from '../components/SeekBar';
 import SpeedControl from '../components/SpeedControl';
 import { parseYouTubeId } from '../utils/youtube';
 
@@ -25,11 +26,9 @@ interface PlayerScreenProps {
 //   June 2026: YouTube now rejects embed URL loaded directly (no parent page
 //   context), on both youtube.com and youtube-nocookie.com.
 //
-// Current fix: wrap embed in a full HTML page with an <iframe>, giving it a
-// real parent document context. YouTube IFrame API (enablejsapi=1) controls
-// playback rate. Mirror is handled at the React Native View level (scaleX: -1).
-// fs=0 hides YouTube's own fullscreen button — we lock to landscape via
-// expo-screen-orientation instead.
+// Current fix: wrap embed in a full HTML page with an <iframe>. IFrame API
+// (enablejsapi=1) controls playback rate. controls=0 hides YouTube's own UI.
+// Mirror + fullscreen handled at React Native layer.
 function buildEmbedHtml(videoId: string): string {
   return `<!DOCTYPE html>
 <html>
@@ -44,7 +43,7 @@ function buildEmbedHtml(videoId: string): string {
 <body>
   <iframe
     id="yt"
-    src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&controls=1&rel=0&playsinline=1&enablejsapi=1&fs=0"
+    src="https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&controls=0&rel=0&playsinline=1&enablejsapi=1&fs=0&modestbranding=1&disablekb=1&iv_load_policy=3"
     allow="autoplay; encrypted-media"
     frameborder="0"
   ></iframe>
@@ -59,7 +58,21 @@ function buildEmbedHtml(videoId: string): string {
       setRate: function(r) {
         if (player && player.setPlaybackRate) player.setPlaybackRate(r);
       },
+      seekTo: function(s) {
+        if (player && player.seekTo) player.seekTo(s, true);
+      },
     };
+
+    setInterval(function() {
+      if (!player || !player.getCurrentTime) return;
+      var cur = player.getCurrentTime();
+      var dur = player.getDuration();
+      if (dur > 0) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'progress', current: cur, duration: dur,
+        }));
+      }
+    }, 500);
   </script>
   <script src="https://www.youtube.com/iframe_api"></script>
 </body>
@@ -68,12 +81,22 @@ function buildEmbedHtml(videoId: string): string {
 
 export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
   const webViewRef = useRef<WebView | null>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [mirrored, setMirrored] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  const [showFsControls, setShowFsControls] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const videoId = parseYouTubeId(videoUrl);
   const { width, height } = useWindowDimensions();
   const portraitPlayerHeight = Math.round(width * (9 / 16));
+
+  function showControlsBriefly() {
+    setShowFsControls(true);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => setShowFsControls(false), 3000);
+  }
 
   async function enterFullscreen() {
     setFullscreen(true);
@@ -81,8 +104,24 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
   }
 
   async function exitFullscreen() {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setShowFsControls(false);
     setFullscreen(false);
     await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+  }
+
+  function handleMessage(event: { nativeEvent: { data: string } }) {
+    try {
+      const msg = JSON.parse(event.nativeEvent.data);
+      if (msg.type === 'progress') {
+        setCurrentTime(msg.current);
+        setDuration(msg.duration);
+      }
+    } catch {}
+  }
+
+  function handleSeek(seconds: number) {
+    webViewRef.current?.injectJavaScript(`window._choreo.seekTo(${seconds}); true;`);
   }
 
   function handleRateChange(rate: number) {
@@ -113,66 +152,90 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
     );
   }
 
-  const webview = (
-    <WebView
-      ref={webViewRef}
-      source={{
-        html: buildEmbedHtml(videoId),
-        baseUrl: 'https://www.youtube-nocookie.com',
-      }}
-      style={styles.webview}
-      javaScriptEnabled
-      allowsInlineMediaPlayback
-      mediaPlaybackRequiresUserAction={false}
-      sharedCookiesEnabled
-      scrollEnabled={false}
-    />
-  );
-
-  if (fullscreen) {
-    // Device is locked to landscape — width/height reflect the rotated dimensions
-    return (
-      <View style={[styles.fullscreenContainer, { width, height }]}>
-        {/* Mirror applied only to the video layer */}
-        <View style={[StyleSheet.absoluteFill, mirrored && styles.mirrored]}>
-          {webview}
-        </View>
-
-        {/* Controls sit outside the mirrored layer — never flipped */}
-        <View style={styles.fsControls}>
-          <Pressable onPress={exitFullscreen} style={styles.fsExitBtn}>
-            <Text style={styles.fsExitText}>✕ Exit</Text>
-          </Pressable>
-          <View style={styles.fsRightControls}>
-            <SpeedControl currentRate={playbackRate} onRateChange={handleRateChange} />
-            <MirrorToggle mirrored={mirrored} onToggle={handleMirrorToggle} />
-          </View>
-        </View>
-      </View>
-    );
-  }
+  // Keep the WebView in the same position in the React tree at all times so it
+  // never remounts (which would restart the video). We hide the portrait header
+  // and controls via display:none in fullscreen, and use absoluteFill + zIndex
+  // on the player container to cover the screen when fullscreen.
+  const playerStyle = fullscreen
+    ? [StyleSheet.absoluteFill, styles.fullscreenPlayer]
+    : { width, height: portraitPlayerHeight };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        <View style={styles.header}>
+
+        {/* Portrait header — hidden in fullscreen via display:none */}
+        <View style={[styles.header, fullscreen && styles.hidden]}>
           <Pressable onPress={onBack} style={styles.backButton}>
             <Text style={styles.backText}>← Back</Text>
           </Pressable>
         </View>
 
-        {/* Mirror applied only to the video layer */}
-        <View style={[{ width, height: portraitPlayerHeight }, mirrored && styles.mirrored]}>
-          {webview}
-        </View>
+        {/* Player container — always in the tree, style changes for fullscreen.
+            The WebView inside never remounts. */}
+        <Pressable style={playerStyle} onPress={fullscreen ? showControlsBriefly : undefined}>
+          {/* Mirror layer — only the video is flipped */}
+          <View style={[StyleSheet.absoluteFill, mirrored && styles.mirrored]}>
+            <WebView
+              ref={webViewRef}
+              source={{
+                html: buildEmbedHtml(videoId),
+                baseUrl: 'https://www.youtube-nocookie.com',
+              }}
+              style={styles.webview}
+              javaScriptEnabled
+              allowsInlineMediaPlayback
+              mediaPlaybackRequiresUserAction={false}
+              sharedCookiesEnabled
+              scrollEnabled={false}
+              onMessage={handleMessage}
+              onShouldStartLoadWithRequest={({ url }) => {
+                // Block outbound navigations (YouTube logo taps, etc.)
+                // Allow only embed + IFrame API resources
+                return (
+                  url.startsWith('about:') ||
+                  url.includes('youtube-nocookie.com') ||
+                  url.includes('youtube.com/iframe_api') ||
+                  url.includes('youtube.com/s/') ||
+                  url.includes('googlevideo.com') ||
+                  url.includes('google.com')
+                );
+              }}
+            />
+          </View>
 
-        <View style={styles.controls}>
+          {/* Fullscreen controls overlay — tap anywhere to reveal, auto-hides after 3s.
+              Outside the mirror layer so buttons are never flipped. */}
+          {fullscreen && showFsControls && (
+            <View style={styles.fsOverlay}>
+              <View style={styles.fsTop}>
+                <Pressable onPress={exitFullscreen} style={styles.fsExitBtn} hitSlop={12}>
+                  <Text style={styles.fsExitText}>✕ Exit</Text>
+                </Pressable>
+                <View style={styles.fsRightControls}>
+                  <SpeedControl currentRate={playbackRate} onRateChange={handleRateChange} compact />
+                  <MirrorToggle mirrored={mirrored} onToggle={handleMirrorToggle} />
+                </View>
+              </View>
+              <View style={styles.fsSeekBar}>
+                <SeekBar current={currentTime} duration={duration} onSeek={handleSeek} />
+              </View>
+            </View>
+          )}
+        </Pressable>
+
+        {/* Portrait seek bar + controls — hidden in fullscreen via display:none */}
+        <View style={[styles.seekBarWrap, fullscreen && styles.hidden]}>
+          <SeekBar current={currentTime} duration={duration} onSeek={handleSeek} />
+        </View>
+        <View style={[styles.controls, fullscreen && styles.hidden]}>
           <SpeedControl currentRate={playbackRate} onRateChange={handleRateChange} />
           <MirrorToggle mirrored={mirrored} onToggle={handleMirrorToggle} />
           <Pressable onPress={enterFullscreen} style={styles.fsBtn}>
             <Text style={styles.fsBtnText}>⛶  Fullscreen</Text>
           </Pressable>
         </View>
+
       </View>
     </SafeAreaView>
   );
@@ -181,6 +244,7 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#111' },
   container: { flex: 1, backgroundColor: '#111' },
+  hidden: { display: 'none' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -192,26 +256,33 @@ const styles = StyleSheet.create({
   webview: { flex: 1, backgroundColor: '#000' },
   mirrored: { transform: [{ scaleX: -1 }] },
 
-  // Fullscreen (landscape locked)
-  fullscreenContainer: { backgroundColor: '#000' },
-  fsControls: {
+  // Fullscreen
+  fullscreenPlayer: { zIndex: 100, backgroundColor: '#000' },
+  fsOverlay: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
+    bottom: 0,
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  fsTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
-  fsExitBtn: { paddingVertical: 6, paddingRight: 12 },
-  fsExitText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-  fsRightControls: { flexDirection: 'row', alignItems: 'center', gap: 20 },
+  fsExitBtn: { paddingVertical: 4, paddingRight: 8 },
+  fsExitText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  fsRightControls: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  fsSeekBar: { paddingHorizontal: 16, paddingBottom: 12 },
 
   // Portrait controls
-  controls: { paddingHorizontal: 20, paddingTop: 16, gap: 16 },
+  seekBarWrap: { paddingHorizontal: 20, paddingTop: 12 },
+  controls: { paddingHorizontal: 20, paddingTop: 12, gap: 16 },
   fsBtn: { paddingVertical: 4 },
   fsBtnText: { color: '#888', fontSize: 14 },
 

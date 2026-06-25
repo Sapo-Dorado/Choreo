@@ -10,14 +10,15 @@ import {
 interface SpeedControlProps {
   currentRate: number;
   onRateChange: (rate: number) => void;
+  compact?: boolean; // hides label, smaller buttons — for fullscreen overlay
 }
 
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
 
-export default function SpeedControl({ currentRate, onRateChange }: SpeedControlProps) {
+export default function SpeedControl({ currentRate, onRateChange, compact }: SpeedControlProps) {
   return (
-    <View style={styles.wrapper}>
-      <Text style={styles.label}>Speed</Text>
+    <View style={[styles.wrapper, compact && styles.wrapperCompact]}>
+      {!compact && <Text style={styles.label}>Speed</Text>}
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -49,6 +50,9 @@ export default function SpeedControl({ currentRate, onRateChange }: SpeedControl
 const styles = StyleSheet.create({
   wrapper: {
     gap: 8,
+  },
+  wrapperCompact: {
+    justifyContent: 'center',
   },
   label: {
     color: '#888',
