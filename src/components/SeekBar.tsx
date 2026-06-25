@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { GestureResponderEvent, StyleSheet, Text, View } from 'react-native';
 
 interface SeekBarProps {
@@ -15,24 +15,48 @@ function formatTime(secs: number): string {
 
 export default function SeekBar({ current, duration, onSeek }: SeekBarProps) {
   const barWidth = useRef(0);
-  const progress = duration > 0 ? Math.min(current / duration, 1) : 0;
+  // While dragging, show finger position immediately regardless of WebView reports
+  const [dragRatio, setDragRatio] = useState<number | null>(null);
 
-  function handleTouch(e: GestureResponderEvent) {
-    if (barWidth.current <= 0 || duration <= 0) return;
+  const reportedProgress = duration > 0 ? Math.min(current / duration, 1) : 0;
+  const progress = dragRatio !== null ? dragRatio : reportedProgress;
+
+  const displayCurrent = dragRatio !== null ? dragRatio * duration : current;
+
+  function ratioFromEvent(e: GestureResponderEvent): number {
+    if (barWidth.current <= 0) return 0;
     const x = e.nativeEvent.locationX;
-    const ratio = Math.max(0, Math.min(x / barWidth.current, 1));
-    onSeek(ratio * duration);
+    return Math.max(0, Math.min(x / barWidth.current, 1));
+  }
+
+  function handleGrant(e: GestureResponderEvent) {
+    const ratio = ratioFromEvent(e);
+    setDragRatio(ratio);
+    onSeek(ratio * Math.max(duration, 0));
+  }
+
+  function handleMove(e: GestureResponderEvent) {
+    const ratio = ratioFromEvent(e);
+    setDragRatio(ratio);
+    onSeek(ratio * Math.max(duration, 0));
+  }
+
+  function handleRelease() {
+    setDragRatio(null);
   }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.time}>{formatTime(current)}</Text>
+      <Text style={styles.time}>{formatTime(displayCurrent)}</Text>
       <View
         style={styles.trackWrap}
         onLayout={e => { barWidth.current = e.nativeEvent.layout.width; }}
         onStartShouldSetResponder={() => true}
-        onResponderGrant={handleTouch}
-        onResponderMove={handleTouch}
+        onMoveShouldSetResponder={() => true}
+        onResponderGrant={handleGrant}
+        onResponderMove={handleMove}
+        onResponderRelease={handleRelease}
+        onResponderTerminate={handleRelease}
       >
         <View style={styles.trackBg} />
         <View style={[styles.trackFill, { width: `${progress * 100}%` as any }]} />

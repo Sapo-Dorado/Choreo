@@ -72,6 +72,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#1e1e1e',
     borderWidth: 1,
     borderColor: '#333',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   buttonActive: {
     backgroundColor: '#e62117',
@@ -84,6 +86,8 @@ const styles = StyleSheet.create({
     color: '#999',
     fontSize: 14,
     fontWeight: '500',
+    lineHeight: 14,
+    includeFontPadding: false,
   },
   buttonTextActive: {
     color: '#fff',

@@ -189,17 +189,18 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
               sharedCookiesEnabled
               scrollEnabled={false}
               onMessage={handleMessage}
-              onShouldStartLoadWithRequest={({ url }) => {
-                // Block outbound navigations (YouTube logo taps, etc.)
-                // Allow only embed + IFrame API resources
-                return (
-                  url.startsWith('about:') ||
-                  url.includes('youtube-nocookie.com') ||
-                  url.includes('youtube.com/iframe_api') ||
-                  url.includes('youtube.com/s/') ||
-                  url.includes('googlevideo.com') ||
-                  url.includes('google.com')
-                );
+              onShouldStartLoadWithRequest={({ url, isTopFrame }) => {
+                // Main frame may only sit on our injected HTML (the baseUrl).
+                // Any navigation away (YouTube logo, links, redirects) is blocked.
+                // Subframes (the YouTube iframe and all its resources) load freely.
+                if (isTopFrame) {
+                  return (
+                    url.startsWith('about:') ||
+                    url === 'https://www.youtube-nocookie.com' ||
+                    url === 'https://www.youtube-nocookie.com/'
+                  );
+                }
+                return true;
               }}
             />
           </View>
@@ -207,17 +208,17 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
           {/* Fullscreen controls overlay — tap anywhere to reveal, auto-hides after 3s.
               Outside the mirror layer so buttons are never flipped. */}
           {fullscreen && showFsControls && (
-            <View style={styles.fsOverlay}>
-              <View style={styles.fsTop}>
+            <View style={styles.fsOverlay} pointerEvents="box-none">
+              <View style={styles.fsTop} pointerEvents="box-none">
                 <Pressable onPress={exitFullscreen} style={styles.fsExitBtn} hitSlop={12}>
                   <Text style={styles.fsExitText}>✕ Exit</Text>
                 </Pressable>
                 <View style={styles.fsRightControls}>
-                  <SpeedControl currentRate={playbackRate} onRateChange={handleRateChange} compact />
+                  <SpeedControl currentRate={playbackRate} onRateChange={handleRateChange} />
                   <MirrorToggle mirrored={mirrored} onToggle={handleMirrorToggle} />
                 </View>
               </View>
-              <View style={styles.fsSeekBar}>
+              <View style={styles.fsSeekBar} pointerEvents="box-none">
                 <SeekBar current={currentTime} duration={duration} onSeek={handleSeek} />
               </View>
             </View>
