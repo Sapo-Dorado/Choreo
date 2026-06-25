@@ -14,6 +14,7 @@ import SeekBar from '../components/SeekBar';
 import SpeedControl from '../components/SpeedControl';
 import { parseYouTubeId, fetchVideoTitle } from '../utils/youtube';
 import { useFavorites } from '../hooks/useFavorites';
+import { usePlayerPrefs } from '../hooks/usePlayerPrefs';
 
 interface PlayerScreenProps {
   videoUrl: string;
@@ -83,8 +84,9 @@ function buildEmbedHtml(videoId: string, initialRate: number): string {
 export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
   const webViewRef = useRef<WebView | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { prefs, loaded, updatePrefs } = usePlayerPrefs();
   const [playbackRate, setPlaybackRate] = useState(1);
-  const playbackRateRef = useRef(playbackRate);
+  const playbackRateRef = useRef(1);
   const [mirrored, setMirrored] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [showFsControls, setShowFsControls] = useState(false);
@@ -94,16 +96,24 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
   const { isFavorite, addFavorite, removeFavorite, favorites } = useFavorites();
   const starred = isFavorite(videoUrl);
 
-  // Keep a ref in sync so useMemo can read the current rate when videoId changes
-  // without adding playbackRate as a dependency (which would rebuild + reload the WebView).
+  // Once AsyncStorage resolves, apply saved prefs as initial values.
+  useEffect(() => {
+    if (!loaded) return;
+    setPlaybackRate(prefs.playbackRate);
+    setMirrored(prefs.mirrored);
+    playbackRateRef.current = prefs.playbackRate;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]); // intentionally run only once when loaded flips to true
+
+  // Keep ref in sync so useMemo reads the current rate when videoId changes.
   useEffect(() => { playbackRateRef.current = playbackRate; }, [playbackRate]);
 
-  // Rebuild the embed HTML only when the video changes — not when rate changes.
+  // Rebuild embed HTML only when the video changes (or prefs finish loading).
   // Rate changes mid-playback go through injectJavaScript instead.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const embedHtml = useMemo(
     () => buildEmbedHtml(videoId ?? '', playbackRateRef.current),
-    [videoId],
+    [videoId, loaded],
   );
   const { width, height } = useWindowDimensions();
   const portraitPlayerHeight = Math.round(width * (9 / 16));
@@ -142,11 +152,15 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
 
   function handleRateChange(rate: number) {
     setPlaybackRate(rate);
+    updatePrefs({ playbackRate: rate });
     webViewRef.current?.injectJavaScript(`window._choreo.setRate(${rate}); true;`);
   }
 
   function handleMirrorToggle() {
-    setMirrored(m => !m);
+    setMirrored((m) => {
+      updatePrefs({ mirrored: !m });
+      return !m;
+    });
   }
 
   async function handleStarToggle() {
@@ -207,9 +221,10 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
         {/* Player container — always in the tree, style changes for fullscreen.
             The WebView inside never remounts. */}
         <Pressable style={playerStyle} onPress={fullscreen ? showControlsBriefly : undefined}>
-          {/* Mirror layer — only the video is flipped */}
+          {/* Mirror layer — only the video is flipped.
+              Render nothing until prefs load so embed HTML gets the right initial rate. */}
           <View style={[StyleSheet.absoluteFill, mirrored && styles.mirrored]}>
-            <WebView
+            {loaded && <WebView
               ref={webViewRef}
               source={{
                 html: embedHtml,
@@ -235,7 +250,7 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
                 }
                 return true;
               }}
-            />
+            />}
           </View>
 
           {/* Fullscreen controls overlay — tap anywhere to reveal, auto-hides after 3s.
