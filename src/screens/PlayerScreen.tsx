@@ -181,6 +181,11 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
           <Pressable onPress={onBack} style={styles.backButton}>
             <Text style={styles.backText}>← Back</Text>
           </Pressable>
+          <Pressable onPress={handleStarToggle} hitSlop={10} style={styles.starBtn}>
+            <Text style={[styles.starText, starred && styles.starTextActive]}>
+              {starred ? '★' : '☆'}
+            </Text>
+          </Pressable>
         </View>
 
         {/* Player container — always in the tree, style changes for fullscreen.
@@ -228,11 +233,6 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
                 <View style={styles.fsRightControls}>
                   <SpeedControl currentRate={playbackRate} onRateChange={handleRateChange} />
                   <MirrorToggle mirrored={mirrored} onToggle={handleMirrorToggle} />
-                  <Pressable onPress={handleStarToggle} hitSlop={10} style={styles.starBtn}>
-                    <Text style={[styles.starText, starred && styles.starTextActive]}>
-                      {starred ? '★' : '☆'}
-                    </Text>
-                  </Pressable>
                 </View>
               </View>
               <View style={styles.fsSeekBar} pointerEvents="box-none">
@@ -248,17 +248,10 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
         </View>
         <View style={[styles.controls, fullscreen && styles.hidden]}>
           <SpeedControl currentRate={playbackRate} onRateChange={handleRateChange} />
-          <View style={styles.controlsRow}>
-            <MirrorToggle mirrored={mirrored} onToggle={handleMirrorToggle} />
-            <Pressable onPress={handleStarToggle} hitSlop={10} style={styles.starBtn}>
-              <Text style={[styles.starText, starred && styles.starTextActive]}>
-                {starred ? '★' : '☆'}
-              </Text>
-            </Pressable>
-            <Pressable onPress={enterFullscreen} style={styles.fsBtn}>
-              <Text style={styles.fsBtnText}>⛶  Fullscreen</Text>
-            </Pressable>
-          </View>
+          <MirrorToggle mirrored={mirrored} onToggle={handleMirrorToggle} />
+          <Pressable onPress={enterFullscreen} style={styles.fsBtn}>
+            <Text style={styles.fsBtnText}>⛶  Fullscreen</Text>
+          </Pressable>
         </View>
 
       </View>
@@ -273,6 +266,7 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
@@ -308,7 +302,6 @@ const styles = StyleSheet.create({
   // Portrait controls
   seekBarWrap: { paddingHorizontal: 20, paddingTop: 12 },
   controls: { paddingHorizontal: 20, paddingTop: 12, gap: 16 },
-  controlsRow: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   fsBtn: { paddingVertical: 4 },
   fsBtnText: { color: '#888', fontSize: 14 },
   starBtn: { paddingVertical: 4 },
