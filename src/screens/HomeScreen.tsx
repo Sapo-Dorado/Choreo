@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import {
-  FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -38,7 +38,11 @@ export default function HomeScreen({ onPlay }: HomeScreenProps) {
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        <View style={styles.inner}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Text style={styles.title}>Choreo</Text>
 
           <TextInput
@@ -71,12 +75,9 @@ export default function HomeScreen({ onPlay }: HomeScreenProps) {
           {favorites.length > 0 && (
             <View style={styles.favSection}>
               <Text style={styles.favLabel}>Favorites</Text>
-              <FlatList
-                data={favorites}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                ItemSeparatorComponent={() => <View style={styles.separator} />}
-                renderItem={({ item }) => (
+              {favorites.map((item, index) => (
+                <View key={item.id}>
+                  {index > 0 && <View style={styles.separator} />}
                   <View style={styles.favRow}>
                     <Pressable
                       style={({ pressed }) => [styles.favTitleWrap, pressed && styles.favTitlePressed]}
@@ -97,11 +98,11 @@ export default function HomeScreen({ onPlay }: HomeScreenProps) {
                       <Text style={styles.favStarText}>★</Text>
                     </Pressable>
                   </View>
-                )}
-              />
+                </View>
+              ))}
             </View>
           )}
-        </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -116,11 +117,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
   },
-  inner: {
+  scrollContent: {
     width: '100%',
     maxWidth: 600,
     paddingHorizontal: 24,
     paddingTop: 60,
+    paddingBottom: 40,
+    alignSelf: 'center',
   },
   title: {
     fontSize: 36,
