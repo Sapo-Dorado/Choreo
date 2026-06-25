@@ -13,7 +13,7 @@ interface SpeedControlProps {
   compact?: boolean; // hides label, smaller buttons — for fullscreen overlay
 }
 
-const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+const SPEEDS = [0.5, 0.65, 0.75, 0.9, 1];
 
 export default function SpeedControl({ currentRate, onRateChange, compact }: SpeedControlProps) {
   return (
@@ -37,7 +37,7 @@ export default function SpeedControl({ currentRate, onRateChange, compact }: Spe
               ]}
             >
               <Text style={[styles.buttonText, isActive && styles.buttonTextActive]}>
-                {rate}×
+                {Math.round(rate * 100)}%
               </Text>
             </Pressable>
           );
