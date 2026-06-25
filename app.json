@@ -3,6 +3,7 @@
     "name": "Choreo",
     "slug": "choreo",
     "plugins": [
+      "expo-screen-orientation",
       ["expo-share-intent", {
         "iosActivationRules": {
           "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
