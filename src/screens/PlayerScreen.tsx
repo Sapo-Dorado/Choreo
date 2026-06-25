@@ -13,6 +13,7 @@ import MirrorToggle from '../components/MirrorToggle';
 import SeekBar from '../components/SeekBar';
 import SpeedControl from '../components/SpeedControl';
 import { parseYouTubeId } from '../utils/youtube';
+import { useFavorites } from '../hooks/useFavorites';
 
 interface PlayerScreenProps {
   videoUrl: string;
@@ -89,6 +90,8 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const videoId = parseYouTubeId(videoUrl);
+  const { isFavorite, addFavorite, removeFavorite, favorites } = useFavorites();
+  const starred = isFavorite(videoUrl);
   const { width, height } = useWindowDimensions();
   const portraitPlayerHeight = Math.round(width * (9 / 16));
 
@@ -131,6 +134,15 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
 
   function handleMirrorToggle() {
     setMirrored(m => !m);
+  }
+
+  function handleStarToggle() {
+    if (starred) {
+      const fav = favorites.find((f) => f.url === videoUrl);
+      if (fav) removeFavorite(fav.id);
+    } else {
+      addFavorite(videoUrl, videoId ?? videoUrl);
+    }
   }
 
   if (!videoId) {
@@ -216,6 +228,11 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
                 <View style={styles.fsRightControls}>
                   <SpeedControl currentRate={playbackRate} onRateChange={handleRateChange} />
                   <MirrorToggle mirrored={mirrored} onToggle={handleMirrorToggle} />
+                  <Pressable onPress={handleStarToggle} hitSlop={10} style={styles.starBtn}>
+                    <Text style={[styles.starText, starred && styles.starTextActive]}>
+                      {starred ? '★' : '☆'}
+                    </Text>
+                  </Pressable>
                 </View>
               </View>
               <View style={styles.fsSeekBar} pointerEvents="box-none">
@@ -231,10 +248,17 @@ export default function PlayerScreen({ videoUrl, onBack }: PlayerScreenProps) {
         </View>
         <View style={[styles.controls, fullscreen && styles.hidden]}>
           <SpeedControl currentRate={playbackRate} onRateChange={handleRateChange} />
-          <MirrorToggle mirrored={mirrored} onToggle={handleMirrorToggle} />
-          <Pressable onPress={enterFullscreen} style={styles.fsBtn}>
-            <Text style={styles.fsBtnText}>⛶  Fullscreen</Text>
-          </Pressable>
+          <View style={styles.controlsRow}>
+            <MirrorToggle mirrored={mirrored} onToggle={handleMirrorToggle} />
+            <Pressable onPress={handleStarToggle} hitSlop={10} style={styles.starBtn}>
+              <Text style={[styles.starText, starred && styles.starTextActive]}>
+                {starred ? '★' : '☆'}
+              </Text>
+            </Pressable>
+            <Pressable onPress={enterFullscreen} style={styles.fsBtn}>
+              <Text style={styles.fsBtnText}>⛶  Fullscreen</Text>
+            </Pressable>
+          </View>
         </View>
 
       </View>
@@ -284,8 +308,12 @@ const styles = StyleSheet.create({
   // Portrait controls
   seekBarWrap: { paddingHorizontal: 20, paddingTop: 12 },
   controls: { paddingHorizontal: 20, paddingTop: 12, gap: 16 },
+  controlsRow: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   fsBtn: { paddingVertical: 4 },
   fsBtnText: { color: '#888', fontSize: 14 },
+  starBtn: { paddingVertical: 4 },
+  starText: { fontSize: 22, color: '#666' },
+  starTextActive: { color: '#e62117' },
 
   errorContainer: {
     flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24,

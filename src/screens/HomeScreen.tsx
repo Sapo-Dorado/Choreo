@@ -20,9 +20,7 @@ interface HomeScreenProps {
 export default function HomeScreen({ onPlay }: HomeScreenProps) {
   const [input, setInput] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const { favorites, addFavorite, removeFavorite, isFavorite } = useFavorites();
-
-  const inputVideoId = parseYouTubeId(input);
+  const { favorites, removeFavorite } = useFavorites();
 
   function handlePlay() {
     const id = parseYouTubeId(input);
@@ -32,16 +30,6 @@ export default function HomeScreen({ onPlay }: HomeScreenProps) {
     }
     setError(null);
     onPlay(input);
-  }
-
-  function handleSaveFavorite() {
-    if (!inputVideoId) return;
-    addFavorite(input, inputVideoId);
-  }
-
-  function handleRemoveFavorite() {
-    const fav = favorites.find((f) => f.url === input);
-    if (fav) removeFavorite(fav.id);
   }
 
   return (
@@ -73,32 +61,12 @@ export default function HomeScreen({ onPlay }: HomeScreenProps) {
             <Text style={styles.errorText}>{error}</Text>
           )}
 
-          <View style={styles.buttonRow}>
-            <Pressable
-              style={({ pressed }) => [styles.playButton, pressed && styles.playButtonPressed]}
-              onPress={handlePlay}
-            >
-              <Text style={styles.playButtonText}>Play</Text>
-            </Pressable>
-
-            {inputVideoId != null && (
-              isFavorite(input) ? (
-                <Pressable
-                  style={({ pressed }) => [styles.starButton, pressed && styles.starButtonPressed]}
-                  onPress={handleRemoveFavorite}
-                >
-                  <Text style={styles.starActive}>★</Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  style={({ pressed }) => [styles.starButton, pressed && styles.starButtonPressed]}
-                  onPress={handleSaveFavorite}
-                >
-                  <Text style={styles.starInactive}>☆</Text>
-                </Pressable>
-              )
-            )}
-          </View>
+          <Pressable
+            style={({ pressed }) => [styles.playButton, pressed && styles.playButtonPressed]}
+            onPress={handlePlay}
+          >
+            <Text style={styles.playButtonText}>Play</Text>
+          </Pressable>
 
           {favorites.length > 0 && (
             <View style={styles.favSection}>
@@ -124,9 +92,9 @@ export default function HomeScreen({ onPlay }: HomeScreenProps) {
                     <Pressable
                       onPress={() => removeFavorite(item.id)}
                       hitSlop={8}
-                      style={({ pressed }) => [styles.favDelete, pressed && styles.favDeletePressed]}
+                      style={({ pressed }) => [styles.favStar, pressed && styles.favStarPressed]}
                     >
-                      <Text style={styles.favDeleteText}>✕</Text>
+                      <Text style={styles.favStarText}>★</Text>
                     </Pressable>
                   </View>
                 )}
@@ -181,18 +149,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingHorizontal: 4,
   },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
-    marginTop: 4,
-  },
   playButton: {
-    flex: 1,
+    width: '100%',
     backgroundColor: '#e62117',
     borderRadius: 10,
     paddingVertical: 16,
     alignItems: 'center',
+    marginTop: 4,
   },
   playButtonPressed: {
     backgroundColor: '#b71c1c',
@@ -202,28 +165,6 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
   },
-  starButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 10,
-    backgroundColor: '#1e1e1e',
-    borderWidth: 1,
-    borderColor: '#444',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  starButtonPressed: {
-    backgroundColor: '#2a2a2a',
-  },
-  starActive: {
-    fontSize: 24,
-    color: '#e62117',
-  },
-  starInactive: {
-    fontSize: 24,
-    color: '#666',
-  },
-
   // Favorites section
   favSection: {
     marginTop: 32,
@@ -264,15 +205,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-  favDelete: {
+  favStar: {
     padding: 4,
     borderRadius: 4,
   },
-  favDeletePressed: {
+  favStarPressed: {
     opacity: 0.5,
   },
-  favDeleteText: {
-    color: '#555',
-    fontSize: 14,
+  favStarText: {
+    color: '#e62117',
+    fontSize: 20,
   },
 });
