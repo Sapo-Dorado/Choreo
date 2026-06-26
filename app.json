@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Mirrored",
-    "slug": "choreo",
+    "slug": "mirrored",
     "plugins": [
       "expo-screen-orientation",
       ["expo-share-intent", {
@@ -11,14 +11,14 @@
         }
       }]
     ],
-    "scheme": "choreo",
+    "scheme": "mirrored",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.sapodorado.choreo",
+      "bundleIdentifier": "com.sapodorado.mirrored",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
