@@ -39,6 +39,7 @@ export default function HomeScreen({ onPlay }: HomeScreenProps) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
+          style={styles.scroll}
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
@@ -115,15 +116,18 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    alignItems: 'center',
+  },
+  scroll: {
+    flex: 1,
+    width: '100%',
   },
   scrollContent: {
-    width: '100%',
     maxWidth: 600,
+    width: '100%',
+    alignSelf: 'center',
     paddingHorizontal: 24,
     paddingTop: 60,
     paddingBottom: 40,
-    alignSelf: 'center',
   },
   title: {
     fontSize: 36,
